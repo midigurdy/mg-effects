@@ -25,8 +25,8 @@
 #define PORT_DAMPING (COMB_COUNT + 1)
 
 #define PORT_GAIN_INPUT (COMB_COUNT + 2)
-#define PORT_MUTE_LEFT (COMB_COUNT + 3)
-#define PORT_MUTE_RIGHT (COMB_COUNT + 4)
+#define PORT_WET_LEFT (COMB_COUNT + 3)
+#define PORT_WET_RIGHT (COMB_COUNT + 4)
 
 #define PORT_INPUT  (COMB_COUNT + 5)
 #define PORT_OUTPUT1 (COMB_COUNT + 6)
@@ -49,8 +49,8 @@ struct symp
     LADSPA_Data *ctrl_feedback;
     LADSPA_Data *ctrl_damping;
     LADSPA_Data *ctrl_gain_input;
-    LADSPA_Data *ctrl_mute_left;
-    LADSPA_Data *ctrl_mute_right;
+    LADSPA_Data *ctrl_wet_left;
+    LADSPA_Data *ctrl_wet_right;
     LADSPA_Data *ctrl_input_gain;
     LADSPA_Data *audio_input;
     LADSPA_Data *audio_output1;
@@ -158,11 +158,11 @@ void symp_connect_port(LADSPA_Handle handle, unsigned long port, LADSPA_Data *bu
             case PORT_GAIN_INPUT:
                 symp->ctrl_gain_input = buf;
                 break;
-            case PORT_MUTE_LEFT:
-                symp->ctrl_mute_left = buf;
+            case PORT_WET_LEFT:
+                symp->ctrl_wet_left = buf;
                 break;
-            case PORT_MUTE_RIGHT:
-                symp->ctrl_mute_right = buf;
+            case PORT_WET_RIGHT:
+                symp->ctrl_wet_right = buf;
                 break;
             case PORT_INPUT:
                 symp->audio_input = buf;
@@ -185,9 +185,17 @@ void inline symp_run_effect(LADSPA_Handle handle, unsigned long sample_count, in
     LADSPA_Data *out2 = symp->audio_output2;
     LADSPA_Data adding_gain = symp->run_adding_gain;
     LADSPA_Data input_gain = *symp->ctrl_gain_input;
+    LADSPA_Data wet_left = *symp->ctrl_wet_left;
+    LADSPA_Data wet_right = *symp->ctrl_wet_right;
     int i, c;
     struct comb *comb;
     float in, out, tmp, feedback;
+
+    if (wet_left < 0) wet_left = 0;
+    else if (wet_left > 1.0) wet_left = 1.0;
+
+    if (wet_right < 0) wet_right = 0;
+    else if (wet_right > 1.0) wet_right = 1.0;
 
     if (*symp->ctrl_damping != symp->damping) {
         symp->damping = *symp->ctrl_damping;
@@ -219,15 +227,13 @@ void inline symp_run_effect(LADSPA_Handle handle, unsigned long sample_count, in
         }
 
         if (add) {
-            if (!*symp->ctrl_mute_left)
-                *(out1++) += out * adding_gain;
-            if (!*symp->ctrl_mute_right)
-            *(out2++) += out * adding_gain;
+            if (wet_left > 0)
+                *(out1++) += out * adding_gain * wet_left;
+            if (wet_right > 0)
+                *(out2++) += out * adding_gain * wet_right;
         } else {
-            if (!*symp->ctrl_mute_left)
-                *(out1++) = out;
-            if (!*symp->ctrl_mute_right)
-                *(out2++) = out;
+            *(out1++) = out * wet_left;
+            *(out2++) = out * wet_right;
         }
 
         audio_input++;
@@ -312,8 +318,8 @@ const LADSPA_Descriptor symp_descriptor = {
         "Feedback",
         "Damping",
         "Gain Input",
-        "Mute Left",
-        "Mute Right",
+        "Wet Left",
+        "Wet Right",
 
         "Input Mono",
         "Output Left",
@@ -340,10 +346,10 @@ const LADSPA_Descriptor symp_descriptor = {
         {.HintDescriptor = LADSPA_HINT_DEFAULT_MINIMUM, .LowerBound = 0.0, .UpperBound = 1.0},
         /* Gain Input */
         {.HintDescriptor = LADSPA_HINT_DEFAULT_MINIMUM, .LowerBound = 0.015},
-        /* Mute Left */
-        {.HintDescriptor = LADSPA_HINT_DEFAULT_0 | LADSPA_HINT_TOGGLED},
-        /* Mute Right */
-        {.HintDescriptor = LADSPA_HINT_DEFAULT_0 | LADSPA_HINT_TOGGLED},
+        /* Wet Left */
+        {.HintDescriptor = LADSPA_HINT_DEFAULT_MAXIMUM, .LowerBound = 0.0, .UpperBound = 1.0},
+        /* Wet Right */
+        {.HintDescriptor = LADSPA_HINT_DEFAULT_MAXIMUM, .LowerBound = 0.0, .UpperBound = 1.0},
 
         /* Audio ports */
         {0}, 
